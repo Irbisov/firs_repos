@@ -42,11 +42,10 @@ def adjust_for_weekend(birthday):
 def get_upcoming_birthdays(users, days=7):
     upcoming_birthdays = []
     today = date.today()
-    next_year = date(year=2026, month=12, day=30)
     for user in users:
         birthday_this_year = string_to_date(user["birthday"]).replace(year=today.year)
         if birthday_this_year < today:
-            birthday_this_year = string_to_date(user["birthday"]).replace(year=next_year.year)
+            birthday_this_year = string_to_date(user["birthday"]).replace(year=today.year+1)
         if 0 <= (birthday_this_year - today).days <= days:
             birthday_this_year = adjust_for_weekend(birthday_this_year)
             congratulation_date_str = date_to_string(birthday_this_year)

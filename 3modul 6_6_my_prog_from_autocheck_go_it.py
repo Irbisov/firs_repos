@@ -55,4 +55,4 @@ def get_upcoming_birthdays(users, days=7):
     return upcoming_birthdays
 
 
- 
+print(get_upcoming_birthdays(users, days=7))
