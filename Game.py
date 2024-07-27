@@ -17,6 +17,7 @@ BLACK = (0, 0, 0)
 GREEN = (0, 255, 0)
 RED = (255, 0, 0)
 YELLOW = (255, 255, 0)
+BLUE = (0, 0, 255)
 
 
 # Завантаження зображень та музики
@@ -47,7 +48,8 @@ background_img = load_image('background.webp')
 explosion_img = load_image('explosion.png')
 explosion_large_img = load_image('explosion_large.png')
 bullet_img = load_image('bullet.png')
-
+boss_img = load_image('boss.png')
+powerup_img = load_image('powerup.png')
 
 # Налаштування шрифта та музики
 font = pygame.font.SysFont(None, 36)
@@ -56,7 +58,8 @@ load_music('background_music.mp3')
 pygame.mixer.music.set_volume(0.3)
 hit_sound = load_sound('hit_sound.mp3')
 explosion_sound = load_sound('explosion_sound.mp3')
-bullet_sound = load_sound('hit_sound.mp3')
+bullet_sound = load_sound('bullet_sound.mp3')
+powerup_sound = load_sound('powerup_sound.mp3')
 pygame.mixer.music.play(-1)  # Циклічне відтворення музики
 
 
@@ -85,6 +88,8 @@ class Defender(pygame.sprite.Sprite):
         self.rect.center = (WIDTH // 2, HEIGHT - 30)
         self.speed = 5
         self.health = 100
+        self.powered_up = False
+        self.power_timer = 0
 
     def update(self):
         keys = pygame.key.get_pressed()
@@ -94,16 +99,34 @@ class Defender(pygame.sprite.Sprite):
             self.rect.x += self.speed
         self.rect.x = max(0, min(self.rect.x, WIDTH - 50))
 
+        if self.powered_up and pygame.time.get_ticks() - self.power_timer > 5000:
+            self.powered_up = False
+            self.image = pygame.transform.scale(defender_img, (50, 50))
+
     def shoot(self):
-        bullet = Bullet(self.rect.centerx, self.rect.top)
-        all_sprites.add(bullet)
-        bullets.add(bullet)
+        if self.powered_up:
+            bullet1 = Bullet(self.rect.centerx - 10, self.rect.top)
+            bullet2 = Bullet(self.rect.centerx + 10, self.rect.top)
+            all_sprites.add(bullet1)
+            all_sprites.add(bullet2)
+            bullets.add(bullet1)
+            bullets.add(bullet2)
+        else:
+            bullet = Bullet(self.rect.centerx, self.rect.top)
+            all_sprites.add(bullet)
+            bullets.add(bullet)
         bullet_sound.play()
 
     def take_damage(self, amount):
         self.health -= amount
         if self.health <= 0:
             self.health = 0
+
+    def power_up(self):
+        self.powered_up = True
+        self.power_timer = pygame.time.get_ticks()
+        self.image = pygame.transform.scale(powerup_img, (50, 50))
+        powerup_sound.play()
 
 
 # Клас для атакуючих
@@ -135,6 +158,38 @@ class Target(pygame.sprite.Sprite):
     def update(self):
         self.rect.y += self.speed
         if self.rect.y > HEIGHT:
+            self.kill()
+
+
+# Клас для босів
+class Boss(pygame.sprite.Sprite):
+    def __init__(self):
+        super().__init__()
+        self.image = pygame.transform.scale(boss_img, (100, 100))
+        self.rect = self.image.get_rect()
+        self.rect.x = WIDTH // 2 - 50
+        self.rect.y = -100
+        self.speed = 2
+        self.health = 1000
+
+    def update(self):
+        self.rect.y += self.speed
+        if self.rect.y > 50:
+            self.rect.y = 50
+
+        if random.randint(1, 50) == 1:
+            self.shoot()
+
+    def shoot(self):
+        bullet = Bullet(self.rect.centerx, self.rect.bottom)
+        bullet.speed = -7
+        all_sprites.add(bullet)
+        bullets.add(bullet)
+        bullet_sound.play()
+
+    def take_damage(self, amount):
+        self.health -= amount
+        if self.health <= 0:
             self.kill()
 
 
@@ -254,6 +309,7 @@ def game_loop():
     targets = pygame.sprite.Group()
     bullets = pygame.sprite.Group()
     explosions = pygame.sprite.Group()
+    bosses = pygame.sprite.Group()
 
     defender = Defender()
     all_sprites.add(defender)
@@ -280,6 +336,17 @@ def game_loop():
             target = Target()
             all_sprites.add(target)
             targets.add(target)
+        if level % 5 == 0 and not bosses:
+            boss = Boss()
+            all_sprites.add(boss)
+            bosses.add(boss)
+
+        # Додаємо бонуси
+        if random.randint(1, 500) == 1:
+            powerup = Target()
+            powerup.image = pygame.transform.scale(powerup_img, (30, 30))
+            all_sprites.add(powerup)
+            targets.add(powerup)
 
         # Оновлюємо спрайти
         all_sprites.update()
@@ -309,6 +376,26 @@ def game_loop():
                 all_sprites.add(explosion)
                 explosions.add(explosion)
                 attacker.kill()
+
+        if pygame.sprite.spritecollideany(defender, bosses):
+            hit_sound.play()
+            defender.take_damage(50)
+            for boss in pygame.sprite.spritecollide(defender, bosses, dokill=False):
+                explosion = Explosion(boss.rect.centerx, boss.rect.centery, large=True)
+                all_sprites.add(explosion)
+                explosions.add(explosion)
+
+        for bullet in pygame.sprite.groupcollide(bullets, bosses, True, False):
+            for boss in bosses:
+                boss.take_damage(10)
+                if boss.health <= 0:
+                    explosion = Explosion(boss.rect.centerx, boss.rect.centery, large=True)
+                    all_sprites.add(explosion)
+                    explosions.add(explosion)
+                    bosses.remove(boss)
+                    all_sprites.remove(boss)
+                    score += 100
+                    explosion_sound.play()
 
         if defender.health <= 0:
             draw_text(f"Гру програно! Рахунок: {score}", font, RED, screen, WIDTH // 2, HEIGHT // 2)
